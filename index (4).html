@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="theme-color" content="#0a0a0a" />
+<title>Virti's SF Half Marathon</title>
+<link rel="manifest" href="manifest.json" />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { 
+    background: #0a0a0a; color: #e8e8e8; font-family: 'Outfit', sans-serif;
+    min-height: 100vh; overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  .card { animation: slideUp 0.35s ease forwards; opacity: 0; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  button { font-family: 'Outfit', sans-serif; }
+  input { font-family: 'Outfit', sans-serif; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── PRE-SEEDED DATA ───
+const SEED_RUNS = [
+  { id: 1, distance_km: 4.06, pace_per_km: "10:02", time_minutes: 40, date: "2026-05-04", type: "easy", title: "4km Easy Run", achievements: "Fastest 2 miles ever", pace_assessment: "perfect", coach_message: "Solid first run on the plan. 10:02/km is a great easy pace — exactly where you should be. The 2-mile PR is a bonus.", recovery_tip: "Light stretching tonight, focus on calves." },
+  { id: 2, distance_km: 4.31, pace_per_km: "8:44", time_minutes: 37, date: "2026-05-06", type: "hills", title: "Hill Repeats", achievements: "Fastest 2 miles ever (again)", pace_assessment: "perfect", coach_message: "8:44/km on hill repeats is strong. Your legs are responding well to structured training. The fact that you PR'd your 2-mile during hills shows real power.", recovery_tip: "Foam roll quads and calves. Extra water today." },
+  { id: 3, distance_km: 6.02, pace_per_km: "8:11", time_minutes: 49, date: "2026-05-08", type: "tempo", title: "Evening Run", achievements: "Fastest 5K ever!", pace_assessment: "on_track", coach_message: "FASTEST 5K EVER at 8:11/km — you're flying! 15 achievements in one run is wild. Just make sure your easy days stay easy after efforts like this.", recovery_tip: "Big stretch session tonight. Protein within 30 min." },
+  { id: 4, distance_km: 6.55, pace_per_km: "10:04", time_minutes: 65, date: "2026-05-10", type: "easy", title: "Sunday Evening Run", achievements: "2nd fastest 5K", pace_assessment: "perfect", coach_message: "This is exactly what a smart runner does — you went hard on the 8th, then dialed it back to 10:04 here. That discipline to run easy after a PR is what prevents injuries.", recovery_tip: "Rest day tomorrow. Hydrate well, foam roll." },
+];
+
+// ─── TRAINING PLAN ───
+const WEEK_PLAN = [
+  {
+    week: 1, dates: "May 12–18", theme: "Calibration Week", totalKm: 22,
+    tip: "You already ran 21km last week — this week we match that with more structure. Easy days MUST be easy.",
+    days: [
+      { day: "Mon", type: "easy", title: "Easy Run", dist: "4 km", detail: "Conversational pace ~10:00/km. No faster. This is recovery effort.", time: "~40 min" },
+      { day: "Tue", type: "strength", title: "Legs & Core", dist: "—", detail: "Squats, lunges, glute bridges, planks, calf raises. 2 sets of 12 each.", time: "15 min" },
+      { day: "Wed", type: "tempo", title: "Tempo Run", dist: "5 km", detail: "1km warm-up, 3km at ~8:30/km (comfortably hard), 1km cool-down.", time: "~45 min" },
+      { day: "Thu", type: "rest", title: "Rest", dist: "—", detail: "Full rest or gentle walk. Stretch hip flexors & calves.", time: "—" },
+      { day: "Fri", type: "easy", title: "Easy Run", dist: "4 km", detail: "Flat route, relaxed pace. Think of it as shaking out the legs.", time: "~40 min" },
+      { day: "Sat", type: "long", title: "Long Run", dist: "7 km", detail: "Slow and steady ~10:00-10:30/km. Walk uphills. Bring water.", time: "~70 min" },
+      { day: "Sun", type: "rest", title: "Rest", dist: "—", detail: "Recovery day. Foam roll, hydrate, meal prep for the week.", time: "—" },
+    ]
+  },
+  {
+    week: 2, dates: "May 19–25", theme: "Building the Base", totalKm: 25,
+    tip: "Small jump in volume. The weekday runs stay short — your long run is where the magic happens.",
+    days: [
+      { day: "Mon", type: "easy", title: "Easy Run", dist: "4.5 km", detail: "Conversational pace. Podcast or music — enjoy it.", time: "~45 min" },
+      { day: "Tue", type: "strength", title: "Legs & Core + Mobility", dist: "—", detail: "Add single-leg deadlifts and hip circles this week.", time: "20 min" },
+      { day: "Wed", type: "hills", title: "Hill Repeats", dist: "5 km", detail: "1km warm-up, 4x hill sprints (200m up, jog down), 1km cool-down.", time: "~45 min" },
+      { day: "Thu", type: "rest", title: "Rest", dist: "—", detail: "Stretch or yoga. Prioritize sleep.", time: "—" },
+      { day: "Fri", type: "easy", title: "Easy Run", dist: "4.5 km", detail: "Flat and relaxed. No watch-checking.", time: "~45 min" },
+      { day: "Sat", type: "long", title: "Long Run", dist: "8.5 km", detail: "New distance! Go 30 sec/km slower than your easy pace. Walk breaks = OK.", time: "~85 min" },
+      { day: "Sun", type: "rest", title: "Rest", dist: "—", detail: "Full rest.", time: "—" },
+    ]
+  },
+  {
+    week: 3, dates: "May 26–Jun 1", theme: "Push Week", totalKm: 28,
+    tip: "Biggest volume week so far. Your body is adapting — trust the discomfort.",
+    days: [
+      { day: "Mon", type: "easy", title: "Easy Run", dist: "5 km", detail: "Conversational. Flat route.", time: "~50 min" },
+      { day: "Tue", type: "strength", title: "Legs & Core", dist: "—", detail: "Focus on glute activation — bridges, monster walks, clam shells.", time: "20 min" },
+      { day: "Wed", type: "tempo", title: "Tempo Run", dist: "6 km", detail: "1km warm-up, 4km at ~8:20-8:30/km, 1km cool-down.", time: "~52 min" },
+      { day: "Thu", type: "rest", title: "Rest", dist: "—", detail: "Rest. Hydrate extra.", time: "—" },
+      { day: "Fri", type: "easy", title: "Easy Run", dist: "5 km", detail: "Keep it easy. Tomorrow is your longest run yet.", time: "~50 min" },
+      { day: "Sat", type: "long", title: "Long Run", dist: "10 km", detail: "DOUBLE DIGITS! Go slow. Fuel at 6km (gel/gummies). Walk hills guilt-free.", time: "~100 min" },
+      { day: "Sun", type: "rest", title: "Rest", dist: "—", detail: "Celebrate. You just ran 10K.", time: "—" },
+    ]
+  },
+  {
+    week: 4, dates: "Jun 2–8", theme: "Recovery Week", totalKm: 20,
+    tip: "Cutback week. Your fitness locks in during rest, not during runs. Resist the urge to do more.",
+    days: [
+      { day: "Mon", type: "easy", title: "Easy Run", dist: "4 km", detail: "Short and truly easy.", time: "~40 min" },
+      { day: "Tue", type: "strength", title: "Light Strength + Yoga", dist: "—", detail: "Easy session. Focus on flexibility.", time: "15 min" },
+      { day: "Wed", type: "easy", title: "Easy Run", dist: "4 km", detail: "Flat, relaxed.", time: "~40 min" },
+      { day: "Thu", type: "rest", title: "Rest", dist: "—", detail: "Full rest.", time: "—" },
+      { day: "Fri", type: "rest", title: "Rest", dist: "—", detail: "Rest.", time: "—" },
+      { day: "Sat", type: "long", title: "Long Run", dist: "7 km", detail: "Shorter than last week on purpose. Enjoy the lightness.", time: "~70 min" },
+      { day: "Sun", type: "rest", title: "Rest", dist: "—", detail: "Recovery.", time: "—" },
+    ]
+  },
+  {
+    week: 5, dates: "Jun 9–15", theme: "Endurance Phase", totalKm: 30,
+    tip: "Back to building. Your long run jumps to 12km — the furthest you've ever gone. You're ready.",
+    days: [
+      { day: "Mon", type: "easy", title: "Easy Run", dist: "5 km", detail: "Conversational pace.", time: "~50 min" },
+      { day: "Tue", type: "strength", title: "Legs & Core", dist: "—", detail: "Squats, lunges, calf raises, planks. 3 sets.", time: "20 min" },
+      { day: "Wed", type: "hills", title: "Hill Workout", dist: "5.5 km", detail: "Warm up 1km, find a moderate hill, 5x repeats, cool down.", time: "~50 min" },
+      { day: "Thu", type: "rest", title: "Rest", dist: "—", detail: "Stretch. Foam roll IT bands.", time: "—" },
+      { day: "Fri", type: "easy", title: "Easy Run", dist: "5 km", detail: "Flat and easy. Pre-hydrate for tomorrow.", time: "~50 min" },
+      { day: "Sat", type: "long", title: "Long Run", dist: "12 km", detail: "NEW DISTANCE PR. Fuel at 5km and 9km. Run/walk strategy on hills.", time: "~2 hrs" },
+      { day: "Sun", type: "rest", title: "Rest", dist: "—", detail: "Full recovery. Good food, good sleep.", time: "—" },
+    ]
+  },
+  {
+    week: 6, dates: "Jun 16–22", theme: "SF Hill Training", totalKm: 31,
+    tip: "The SF course has serious hills. This week we lean into them. Walk-running uphills is a strategy, not weakness.",
+    days: [
+      { day: "Mon", type: "easy", title: "Easy Run", dist: "5 km", detail: "Flat route, easy effort.", time: "~50 min" },
+      { day: "Tue", type: "strength", title: "Hill-Specific Strength", dist: "—", detail: "Heavy on glutes & calves. Step-ups, heel drops, Bulgarian split squats.", time: "20 min" },
+      { day: "Wed", type: "hills", title: "Hilly Route Run", dist: "6 km", detail: "Find the hilliest route near you. Practice power-hiking uphills, controlled downhills.", time: "~55 min" },
+      { day: "Thu", type: "rest", title: "Rest", dist: "—", detail: "Rest.", time: "—" },
+      { day: "Fri", type: "easy", title: "Easy Run", dist: "5 km", detail: "Easy effort.", time: "~50 min" },
+      { day: "Sat", type: "long", title: "Long Run (Hilly)", dist: "13 km", detail: "Pick a hilly long route. Practice race-day pacing: easy start, steady middle, strong last 2km.", time: "~2:10" },
+      { day: "Sun", type: "rest", title: "Rest", dist: "—", detail: "Recovery.", time: "—" },
+    ]
+  },
+  {
+    week: 7, dates: "Jun 23–29", theme: "Peak Volume", totalKm: 34,
+    tip: "Highest mileage week. After this, you start tapering. Embrace the hard — it's the last big push.",
+    days: [
+      { day: "Mon", type: "easy", title: "Easy Run", dist: "5.5 km", detail: "Easy pace.", time: "~55 min" },
+      { day: "Tue", type: "strength", title: "Legs & Core", dist: "—", detail: "Maintenance strength. Don't go heavy — preserve legs.", time: "15 min" },
+      { day: "Wed", type: "tempo", title: "Tempo Run", dist: "7 km", detail: "1.5km warm-up, 4km at ~8:15/km, 1.5km cool-down.", time: "~60 min" },
+      { day: "Thu", type: "rest", title: "Rest", dist: "—", detail: "Rest. Extra sleep.", time: "—" },
+      { day: "Fri", type: "easy", title: "Easy Run", dist: "5.5 km", detail: "Flat, easy. Pre-hydrate.", time: "~55 min" },
+      { day: "Sat", type: "long", title: "Long Run", dist: "15 km", detail: "LONGEST RUN EVER. Fuel every 5km. Walk strategy on hills. If you can do 15, you can do 21 on race day.", time: "~2:30" },
+      { day: "Sun", type: "rest", title: "Rest", dist: "—", detail: "You ran 15km. Rest like you mean it.", time: "—" },
+    ]
+  },
+  {
+    week: 8, dates: "Jun 30–Jul 6", theme: "Recovery Week", totalKm: 22,
+    tip: "Cutback before the final push. Your body is absorbing 7 weeks of work. Less is more.",
+    days: [
+      { day: "Mon", type: "easy", title: "Easy Run", dist: "4 km", detail: "Short, easy.", time: "~40 min" },
+      { day: "Tue", type: "strength", title: "Light Strength + Yoga", dist: "—", detail: "Mobility focus.", time: "15 min" },
+      { day: "Wed", type: "easy", title: "Easy Run", dist: "5 km", detail: "Relaxed.", time: "~50 min" },
+      { day: "Thu", type: "rest", title: "Rest", dist: "—", detail: "Rest.", time: "—" },
+      { day: "Fri", type: "rest", title: "Rest", dist: "—", detail: "Rest.", time: "—" },
+      { day: "Sat", type: "long", title: "Long Run", dist: "10 km", detail: "Easy pace. Should feel comfortable now.", time: "~1:40" },
+      { day: "Sun", type: "rest", title: "Rest", dist: "—", detail: "Recovery.", time: "—" },
+    ]
+  },
+  {
+    week: 9, dates: "Jul 7–13", theme: "Peak Long Run", totalKm: 30,
+    tip: "Your longest run ever: 17km. After this, everything tapers down. This is the summit.",
+    days: [
+      { day: "Mon", type: "easy", title: "Easy Run", dist: "5 km", detail: "Easy pace.", time: "~50 min" },
+      { day: "Tue", type: "strength", title: "Light Strength", dist: "—", detail: "Keep it easy. Legs need to be fresh for Saturday.", time: "15 min" },
+      { day: "Wed", type: "tempo", title: "Tempo Run", dist: "6 km", detail: "1km warm-up, 4km at race effort (~8:30/km), 1km cool-down.", time: "~52 min" },
+      { day: "Thu", type: "rest", title: "Rest", dist: "—", detail: "Full rest. Carb up for Saturday.", time: "—" },
+      { day: "Fri", type: "rest", title: "Rest", dist: "—", detail: "Rest. Lay out gear. Early bed.", time: "—" },
+      { day: "Sat", type: "long", title: "Long Run", dist: "17 km", detail: "THE BIG ONE. Start slow, fuel at 5/10/14km. Walk hills. You WILL finish this. Race day is only 4km more.", time: "~2:50" },
+      { day: "Sun", type: "rest", title: "Rest", dist: "—", detail: "You're a 17km runner now. Rest.", time: "—" },
+    ]
+  },
+  {
+    week: 10, dates: "Jul 14–20", theme: "Taper", totalKm: 18,
+    tip: "The taper crazies are real — you'll feel restless. Trust the science. Resting now = faster on race day.",
+    days: [
+      { day: "Mon", type: "easy", title: "Easy Run", dist: "4 km", detail: "Shakeout.", time: "~40 min" },
+      { day: "Tue", type: "strength", title: "Light Mobility", dist: "—", detail: "Gentle stretching and foam rolling only.", time: "10 min" },
+      { day: "Wed", type: "easy", title: "Easy Run", dist: "5 km", detail: "Include 4x30sec strides to keep legs sharp.", time: "~48 min" },
+      { day: "Thu", type: "rest", title: "Rest", dist: "—", detail: "Rest.", time: "—" },
+      { day: "Fri", type: "rest", title: "Rest", dist: "—", detail: "Rest.", time: "—" },
+      { day: "Sat", type: "long", title: "Easy Long Run", dist: "8 km", detail: "Last real run. Easy pace, finish feeling fresh. Visualize race day.", time: "~80 min" },
+      { day: "Sun", type: "rest", title: "Rest", dist: "—", detail: "Recovery.", time: "—" },
+    ]
+  },
+  {
+    week: 11, dates: "Jul 21–26", theme: "RACE WEEK", totalKm: 24.1,
+    tip: "Nothing you do this week makes you fitter. Sleep, hydrate, eat carbs, and show up ready to have the time of your life.",
+    days: [
+      { day: "Mon", type: "easy", title: "Shakeout", dist: "3 km", detail: "10 min easy jog. Keep legs loose.", time: "~30 min" },
+      { day: "Tue", type: "rest", title: "Rest", dist: "—", detail: "Full rest. Pin your bib if you have it.", time: "—" },
+      { day: "Wed", type: "easy", title: "Shakeout", dist: "2 km", detail: "Very easy 10 min. That's it.", time: "~20 min" },
+      { day: "Thu", type: "rest", title: "Rest + Carb Load", dist: "—", detail: "Pasta/rice dinner. Hydrate all day. Lay out EVERYTHING for race morning.", time: "—" },
+      { day: "Fri", type: "rest", title: "Rest", dist: "—", detail: "Rest. Light walk if antsy. Early bed.", time: "—" },
+      { day: "Sat", type: "rest", title: "Pre-Race Rest", dist: "—", detail: "Stay off your feet. Light carb meals. Charge watch. Sleep early.", time: "—" },
+      { day: "Sun", type: "race", title: "RACE DAY — 21.1 km", dist: "21.1 km", detail: "First 7km: hold back. Middle 7km: steady. Last 7km: everything you've got. WALK THE HILLS. YOU ARE A HALF MARATHONER.", time: "Race!" },
+    ]
+  },
+];
+
+const NUTRITION = {
+  preRun: [
+    { when: "2-3 hrs before", what: "Toast + banana + peanut butter, or oatmeal with honey", why: "Slow-release carbs for sustained energy" },
+    { when: "30 min before", what: "Small banana or a few dates + water", why: "Quick top-up without heaviness" },
+    { when: "Avoid before runs", what: "Heavy dairy, high fiber, spicy food, new foods", why: "GI distress mid-run is real and terrible" },
+  ],
+  postRun: [
+    { when: "Within 30 min", what: "Chocolate milk, protein shake, or yogurt + fruit", why: "Glycogen replenishment + muscle repair window" },
+    { when: "Within 2 hrs", what: "Balanced meal: rice/pasta + chicken/paneer + veggies", why: "Full recovery fuel — carbs + protein + micronutrients" },
+    { when: "All day", what: "Hydrate — aim for pale yellow urine", why: "Dehydration delays recovery and hurts next-day performance" },
+  ],
+  raceWeek: [
+    "Carb-load Thu–Sat: extra rice, pasta, bread at each meal",
+    "Race morning: eat what you've practiced, 3 hrs before start",
+    "During race: gel/gummies at km 7 and km 14",
+    "Post-race: eat within 30 min, celebrate with whatever you want"
+  ],
+  daily: [
+    "Protein at every meal (eggs, chicken, paneer, dal, tofu)",
+    "Colorful vegetables for anti-inflammatory benefits",
+    "Complex carbs are your friend during training — don't cut them",
+    "Limit alcohol on nights before runs (dehydration + poor sleep)",
+  ]
+};
+
+const HABITS = [
+  { id: "sleep", label: "7+ hrs sleep", icon: "🌙" },
+  { id: "water", label: "2L+ water", icon: "💧" },
+  { id: "stretch", label: "5 min stretch", icon: "🧘" },
+  { id: "foam", label: "Foam roll", icon: "🔵" },
+  { id: "protein", label: "Protein at each meal", icon: "🥚" },
+  { id: "noAlcohol", label: "No alcohol (pre-run day)", icon: "🚫" },
+];
+
+const TYPE_STYLES = {
+  easy: { bg: "#1a2e1a", border: "#2d5a2d", accent: "#5cb85c", label: "EASY" },
+  tempo: { bg: "#2e1a1a", border: "#5a2d2d", accent: "#e85d5d", label: "TEMPO" },
+  hills: { bg: "#2e2a1a", border: "#5a4d2d", accent: "#e8b84d", label: "HILLS" },
+  long: { bg: "#1a1a2e", border: "#2d2d5a", accent: "#5d7be8", label: "LONG" },
+  strength: { bg: "#2a1a2e", border: "#4d2d5a", accent: "#b45de8", label: "STRENGTH" },
+  rest: { bg: "#1a1a1a", border: "#333", accent: "#666", label: "REST" },
+  race: { bg: "#2e2200", border: "#5a4400", accent: "#ffc107", label: "RACE" },
+};
+
+// ─── STORAGE ───
+function loadJSON(key, fallback) {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+  catch { return fallback; }
+}
+function saveJSON(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+}
+
+// ─── MAIN ───
+function App() {
+  const [tab, setTab] = useState("dashboard");
+  const [runs, setRuns] = useState(() => loadJSON("v-runs", SEED_RUNS));
+  const [habitLog, setHabitLog] = useState(() => loadJSON("v-habits", {}));
+  const [completedDays, setCompletedDays] = useState(() => loadJSON("v-completed", {}));
+  const [expandedWeek, setExpandedWeek] = useState(0);
+  const [analysisResult, setAnalysisResult] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [coachMsg, setCoachMsg] = useState(null);
+  const [nutritionTab, setNutritionTab] = useState("preRun");
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("v-apikey") || "");
+  const [showSettings, setShowSettings] = useState(false);
+  const [manualForm, setManualForm] = useState({ title: "", distance_km: "", pace_per_km: "", time_minutes: "", date: new Date().toISOString().slice(0,10), type: "easy" });
+  const [showManual, setShowManual] = useState(false);
+  const fileRef = useRef(null);
+
+  const saveRuns = (r) => { setRuns(r); saveJSON("v-runs", r); };
+  const saveHabits = (h) => { setHabitLog(h); saveJSON("v-habits", h); };
+  const saveCompleted = (c) => { setCompletedDays(c); saveJSON("v-completed", c); };
+
+  const now = new Date();
+  const PLAN_START = new Date("2026-05-12");
+  const RACE_DATE = new Date("2026-07-26");
+  const diffMs = now - PLAN_START;
+  const currentWeek = Math.max(0, Math.min(10, Math.floor(diffMs / (7*24*60*60*1000))));
+  const daysToRace = Math.max(0, Math.ceil((RACE_DATE - now) / 86400000));
+
+  const totalKmRun = runs.reduce((s, r) => s + (parseFloat(r.distance_km) || 0), 0);
+  const runOnlyRuns = runs.filter(r => r.distance_km > 0);
+  const avgPace = runOnlyRuns.length ? runOnlyRuns.reduce((s,r) => {
+    if (!r.pace_per_km) return s;
+    const parts = r.pace_per_km.split(":").map(Number);
+    return s + parts[0] + (parts[1]||0)/60;
+  }, 0) / runOnlyRuns.length : 0;
+  const completedCount = Object.values(completedDays).filter(Boolean).length;
+  const todayStr = now.toISOString().slice(0, 10);
+
+  // Screenshot analysis
+  const handleScreenshot = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!apiKey) { setCoachMsg("Add your Claude API key in Settings (⚙️) to enable screenshot analysis. Or use Manual Log below."); return; }
+    setAnalyzing(true); setAnalysisResult(null); setCoachMsg(null);
+    try {
+      const base64 = await new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = () => res(reader.result.split(",")[1]);
+        reader.onerror = () => rej(new Error("Read failed"));
+        reader.readAsDataURL(file);
+      });
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          messages: [{ role: "user", content: [
+            { type: "image", source: { type: "base64", media_type: file.type || "image/jpeg", data: base64 } },
+            { type: "text", text: `You are a running coach analyzing a Strava screenshot for Virti training for the SF Half Marathon July 26, 2026. She's on week ${currentWeek+1}/11. Her recent runs: ${JSON.stringify(runs.slice(-5))}. This week's plan: ${JSON.stringify(WEEK_PLAN[currentWeek]?.days||[])}.
+Extract data and coach. Respond ONLY in JSON (no markdown, no backticks):
+{"distance_km":number,"pace_per_km":"M:SS","time_minutes":number,"date":"YYYY-MM-DD","type":"easy|tempo|hills|long|race","title":"string","achievements":"string or null","coach_message":"2-3 sentences specific encouraging coaching. Reference her pace/distance. If easy day was too fast, flag it. If PR, celebrate.","pace_assessment":"on_track|too_fast|too_slow|perfect","recovery_tip":"one specific recovery action"}` }
+          ]}]
+        })
+      });
+      const data = await resp.json();
+      const text = data.content?.map(i => i.text || "").join("") || "";
+      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+      setAnalysisResult(parsed);
+      setCoachMsg(parsed.coach_message);
+      const updated = [...runs, { id: Date.now(), ...parsed, logged_at: new Date().toISOString() }];
+      saveRuns(updated);
+    } catch (err) {
+      console.error(err);
+      setCoachMsg("Couldn't analyze that screenshot. Check your API key in Settings, or try Manual Log.");
+    }
+    setAnalyzing(false);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  // Manual log
+  const handleManualLog = () => {
+    const r = {
+      id: Date.now(),
+      distance_km: parseFloat(manualForm.distance_km) || 0,
+      pace_per_km: manualForm.pace_per_km,
+      time_minutes: parseInt(manualForm.time_minutes) || 0,
+      date: manualForm.date,
+      type: manualForm.type,
+      title: manualForm.title || "Run",
+      achievements: null,
+      pace_assessment: "on_track",
+      coach_message: null,
+      recovery_tip: null,
+      logged_at: new Date().toISOString(),
+    };
+    saveRuns([...runs, r]);
+    setManualForm({ title: "", distance_km: "", pace_per_km: "", time_minutes: "", date: todayStr, type: "easy" });
+    setShowManual(false);
+  };
+
+  const toggleDay = (wk, day) => {
+    const key = `${wk}-${day}`;
+    saveCompleted({ ...completedDays, [key]: !completedDays[key] });
+  };
+
+  const toggleHabit = (date, hid) => {
+    const key = `${date}-${hid}`;
+    saveHabits({ ...habitLog, [key]: !habitLog[key] });
+  };
+
+  const deleteRun = (id) => {
+    saveRuns(runs.filter(r => r.id !== id));
+  };
+
+  const TABS = [
+    { id: "dashboard", label: "Home", icon: "⚡" },
+    { id: "plan", label: "Plan", icon: "📋" },
+    { id: "log", label: "Log", icon: "📸" },
+    { id: "nutrition", label: "Fuel", icon: "🍌" },
+    { id: "habits", label: "Habits", icon: "✓" },
+  ];
+
+  const inputStyle = {
+    width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #333",
+    background: "#111", color: "#e8e8e8", fontSize: 14, fontFamily: "'Outfit', sans-serif",
+    outline: "none",
+  };
+
+  return (
+    <div style={{ maxWidth: 480, margin: "0 auto", position: "relative", paddingBottom: 80 }}>
+
+      {/* HEADER */}
+      <div style={{
+        padding: "16px 16px 12px", background: "linear-gradient(180deg, #141414, #0a0a0a)",
+        borderBottom: "1px solid #1a1a1a", position: "sticky", top: 0, zIndex: 10,
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 3, color: "#e85d5d", textTransform: "uppercase" }}>SF Half Marathon</div>
+            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 2 }}>Virti's Training</div>
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <button onClick={() => setShowSettings(!showSettings)} style={{
+              background: "none", border: "none", color: "#555", fontSize: 20, cursor: "pointer", padding: 4,
+            }}>⚙️</button>
+            <div style={{
+              background: daysToRace <= 14 ? "linear-gradient(135deg, #e85d5d, #ff8a5c)" : "linear-gradient(135deg, #1a2e1a, #2d5a2d)",
+              padding: "6px 12px", borderRadius: 10, textAlign: "center",
+            }}>
+              <div className="mono" style={{ fontSize: 18, fontWeight: 800 }}>{daysToRace}</div>
+              <div style={{ fontSize: 8, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase", opacity: 0.8 }}>days</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Settings panel */}
+        {showSettings && (
+          <div style={{ marginTop: 12, background: "#111", borderRadius: 12, padding: 16, border: "1px solid #222" }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#888", marginBottom: 8 }}>Claude API Key (for screenshot analysis)</div>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={e => { setApiKey(e.target.value); localStorage.setItem("v-apikey", e.target.value); }}
+              placeholder="sk-ant-..."
+              style={inputStyle}
+            />
+            <div style={{ fontSize: 11, color: "#444", marginTop: 6, lineHeight: 1.4 }}>
+              Stored locally on your device only. Get one at console.anthropic.com. Without it, use Manual Log instead.
+            </div>
+            <button onClick={() => {
+              if (confirm("Reset all data? This clears all runs, habits, and progress.")) {
+                saveRuns(SEED_RUNS); saveHabits({}); saveCompleted({});
+                setShowSettings(false);
+              }
+            }} style={{
+              marginTop: 10, padding: "8px 14px", borderRadius: 8, border: "1px solid #5a2d2d",
+              background: "#2e1a1a", color: "#e85d5d", fontSize: 12, fontWeight: 600, cursor: "pointer",
+            }}>Reset All Data</button>
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: "14px 14px 0" }}>
+
+        {/* ═══ DASHBOARD ═══ */}
+        {tab === "dashboard" && (
+          <div>
+            <div className="card" style={{
+              background: "linear-gradient(135deg, #e85d5d22, #ff8a5c11)",
+              border: "1px solid #e85d5d33", borderRadius: 14, padding: 18, marginBottom: 14,
+              animationDelay: "0s",
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "#e85d5d", letterSpacing: 2, textTransform: "uppercase" }}>
+                Week {currentWeek + 1} of 11
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{WEEK_PLAN[currentWeek]?.theme}</div>
+              <div style={{ fontSize: 12, color: "#888", marginTop: 8, lineHeight: 1.5 }}>{WEEK_PLAN[currentWeek]?.tip}</div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+              {[
+                { label: "Total Logged", value: `${totalKmRun.toFixed(1)}km`, color: "#5cb85c" },
+                { label: "Runs Logged", value: runOnlyRuns.length, color: "#5d7be8" },
+                { label: "Avg Pace", value: avgPace ? `${Math.floor(avgPace)}:${String(Math.round((avgPace%1)*60)).padStart(2,'0')}/km` : "—", color: "#e8b84d" },
+                { label: "Days Done", value: `${completedCount}/77`, color: "#b45de8" },
+              ].map((s, i) => (
+                <div key={i} className="card" style={{
+                  background: "#141414", border: `1px solid ${s.color}22`, borderRadius: 12,
+                  padding: 14, animationDelay: `${i*0.08}s`,
+                }}>
+                  <div style={{ fontSize: 10, color: "#555", fontWeight: 600, letterSpacing: 1, textTransform: "uppercase" }}>{s.label}</div>
+                  <div className="mono" style={{ fontSize: 22, fontWeight: 800, color: s.color, marginTop: 4 }}>{s.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Today's workout */}
+            {(() => {
+              const dayMap = { 0:6, 1:0, 2:1, 3:2, 4:3, 5:4, 6:5 };
+              const todayPlan = WEEK_PLAN[currentWeek]?.days[dayMap[now.getDay()]];
+              if (!todayPlan) return null;
+              const st = TYPE_STYLES[todayPlan.type];
+              return (
+                <div className="card" style={{
+                  background: st.bg, border: `1px solid ${st.border}`, borderRadius: 14,
+                  padding: 18, marginBottom: 14, animationDelay: "0.3s",
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: st.accent, letterSpacing: 2 }}>{st.label} · TODAY</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{todayPlan.title}</div>
+                    </div>
+                    {todayPlan.dist !== "—" && (
+                      <div className="mono" style={{ fontSize: 20, fontWeight: 800, color: st.accent }}>{todayPlan.dist}</div>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 13, color: "#aaa", marginTop: 10, lineHeight: 1.6 }}>{todayPlan.detail}</div>
+                  {todayPlan.time !== "—" && <div style={{ fontSize: 12, color: "#555", marginTop: 8 }}>⏱ {todayPlan.time}</div>}
+                </div>
+              );
+            })()}
+
+            {/* Volume chart */}
+            <div className="card" style={{
+              background: "#141414", border: "1px solid #222", borderRadius: 14,
+              padding: 18, marginBottom: 14, animationDelay: "0.4s",
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "#555", letterSpacing: 1, textTransform: "uppercase", marginBottom: 14 }}>
+                Weekly Volume Plan
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 90 }}>
+                {WEEK_PLAN.map((w, i) => {
+                  const h = (w.totalKm / 34) * 80;
+                  const isCur = i === currentWeek;
+                  const isRec = i === 3 || i === 7;
+                  const isPk = i === 6 || i === 8;
+                  const isRace = i === 10;
+                  return (
+                    <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                      <span className="mono" style={{ fontSize: 8, fontWeight: 600, color: isCur ? "#e85d5d" : "#444" }}>{w.totalKm}</span>
+                      <div style={{
+                        width: "100%", height: h, borderRadius: 3,
+                        background: isRace ? "#ffc107" : isPk ? "#e85d5d" : isRec ? "#333" : isCur ? "#5cb85c" : "#222",
+                        border: isCur ? "2px solid #5cb85c" : "none",
+                      }} />
+                      <span style={{ fontSize: 8, color: isCur ? "#e85d5d" : "#333" }}>{i+1}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Recent runs */}
+            {runs.length > 0 && (
+              <div className="card" style={{
+                background: "#141414", border: "1px solid #222", borderRadius: 14,
+                padding: 18, animationDelay: "0.5s",
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#555", letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>Recent Logs</div>
+                {runs.slice(-4).reverse().map((r, i) => (
+                  <div key={i} style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    padding: "8px 0", borderBottom: i < 3 ? "1px solid #1a1a1a" : "none",
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{r.title || "Run"}</div>
+                      <div style={{ fontSize: 10, color: "#444" }}>{r.date}</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: "#5cb85c" }}>{r.distance_km}km</div>
+                      <div className="mono" style={{ fontSize: 10, color: "#555" }}>{r.pace_per_km}/km</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ═══ PLAN ═══ */}
+        {tab === "plan" && (
+          <div>
+            {WEEK_PLAN.map((week, wi) => {
+              const isOpen = expandedWeek === wi;
+              const isCur = wi === currentWeek;
+              const wkDone = week.days.filter((_, di) => completedDays[`${wi}-${di}`]).length;
+              return (
+                <div key={wi} style={{
+                  marginBottom: 8, borderRadius: 12, overflow: "hidden",
+                  border: isCur ? "1px solid #e85d5d44" : "1px solid #1a1a1a", background: "#111",
+                }}>
+                  <button onClick={() => setExpandedWeek(isOpen ? -1 : wi)} style={{
+                    width: "100%", padding: "12px 14px", border: "none",
+                    background: isCur ? "#e85d5d0a" : "transparent",
+                    cursor: "pointer", display: "flex", alignItems: "center", gap: 10,
+                    textAlign: "left", color: "#e8e8e8",
+                  }}>
+                    <div className="mono" style={{
+                      width: 32, height: 32, borderRadius: 8,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 13, fontWeight: 800,
+                      background: wi === 10 ? "#ffc10712" : isCur ? "#e85d5d12" : "#1a1a1a",
+                      color: wi === 10 ? "#ffc107" : isCur ? "#e85d5d" : "#555",
+                      border: `1px solid ${wi === 10 ? "#ffc10733" : isCur ? "#e85d5d33" : "#222"}`,
+                    }}>{wi === 10 ? "🏅" : wi+1}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>
+                        {week.theme}
+                        {isCur && <span style={{ fontSize: 9, color: "#e85d5d", marginLeft: 6, fontWeight: 700 }}>NOW</span>}
+                      </div>
+                      <div style={{ fontSize: 10, color: "#444" }}>{week.dates} · {week.totalKm}km</div>
+                    </div>
+                    <div className="mono" style={{
+                      fontSize: 10, fontWeight: 600,
+                      color: wkDone === 7 ? "#5cb85c" : "#444",
+                      background: wkDone === 7 ? "#5cb85c15" : "#1a1a1a",
+                      padding: "2px 7px", borderRadius: 6,
+                    }}>{wkDone}/7</div>
+                  </button>
+                  {isOpen && (
+                    <div style={{ padding: "0 14px 14px" }}>
+                      <div style={{
+                        background: "#1a1a1a", borderRadius: 8, padding: "8px 12px",
+                        marginBottom: 10, fontSize: 11, color: "#777", lineHeight: 1.5,
+                        borderLeft: "3px solid #e85d5d33",
+                      }}>💡 {week.tip}</div>
+                      {week.days.map((d, di) => {
+                        const done = completedDays[`${wi}-${di}`];
+                        const st = TYPE_STYLES[d.type];
+                        return (
+                          <div key={di} onClick={() => toggleDay(wi, di)} style={{
+                            display: "flex", gap: 8, padding: "8px 10px", marginBottom: 5,
+                            borderRadius: 8, background: done ? "#1a2e1a" : st.bg,
+                            border: `1px solid ${done ? "#2d5a2d" : st.border}`,
+                            cursor: "pointer", opacity: done ? 0.55 : 1,
+                          }}>
+                            <div style={{
+                              width: 18, height: 18, borderRadius: 4, flexShrink: 0, marginTop: 1,
+                              border: done ? "none" : `2px solid ${st.accent}33`,
+                              background: done ? "#5cb85c" : "transparent",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                            }}>{done && <span style={{ color: "#fff", fontSize: 11, fontWeight: 700 }}>✓</span>}</div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                <span className="mono" style={{ fontSize: 9, color: "#444", fontWeight: 700, width: 26 }}>{d.day}</span>
+                                <span style={{ fontSize: 8, fontWeight: 700, color: st.accent, background: `${st.accent}12`, padding: "1px 5px", borderRadius: 3, letterSpacing: 1 }}>{st.label}</span>
+                                <span style={{ fontSize: 12, fontWeight: 600, textDecoration: done ? "line-through" : "none", color: done ? "#555" : "#ddd" }}>{d.title}</span>
+                                {d.dist !== "—" && <span className="mono" style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: st.accent }}>{d.dist}</span>}
+                              </div>
+                              <div style={{ fontSize: 10, color: "#555", marginTop: 3, lineHeight: 1.4, marginLeft: 26 }}>{d.detail}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ═══ LOG ═══ */}
+        {tab === "log" && (
+          <div>
+            {/* Screenshot upload */}
+            <div className="card" style={{
+              background: "#141414", border: "1px dashed #333", borderRadius: 14,
+              padding: 28, textAlign: "center", marginBottom: 14, cursor: "pointer",
+              animationDelay: "0s",
+            }} onClick={() => fileRef.current?.click()}>
+              <input ref={fileRef} type="file" accept="image/*" onChange={handleScreenshot} style={{ display: "none" }} />
+              <div style={{ fontSize: 36, marginBottom: 10 }}>📸</div>
+              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Upload Strava Screenshot</div>
+              <div style={{ fontSize: 11, color: "#555", lineHeight: 1.4 }}>
+                {apiKey ? "AI will extract metrics & give coaching advice" : "Add API key in ⚙️ Settings, or use Manual Log below"}
+              </div>
+            </div>
+
+            {/* Manual log toggle */}
+            <button onClick={() => setShowManual(!showManual)} style={{
+              width: "100%", padding: "12px", borderRadius: 10, border: "1px solid #222",
+              background: "#111", color: "#888", fontSize: 13, fontWeight: 600, cursor: "pointer",
+              marginBottom: 14,
+            }}>
+              {showManual ? "Cancel" : "✏️ Manual Log"}
+            </button>
+
+            {showManual && (
+              <div className="card" style={{
+                background: "#111", border: "1px solid #222", borderRadius: 14,
+                padding: 16, marginBottom: 14, animationDelay: "0s",
+              }}>
+                <div style={{ display: "grid", gap: 10 }}>
+                  <input placeholder="Title (e.g. Evening Run)" value={manualForm.title} onChange={e => setManualForm({...manualForm, title: e.target.value})} style={inputStyle} />
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <input placeholder="Distance (km)" type="number" step="0.01" value={manualForm.distance_km} onChange={e => setManualForm({...manualForm, distance_km: e.target.value})} style={inputStyle} />
+                    <input placeholder="Pace (M:SS)" value={manualForm.pace_per_km} onChange={e => setManualForm({...manualForm, pace_per_km: e.target.value})} style={inputStyle} />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <input placeholder="Time (min)" type="number" value={manualForm.time_minutes} onChange={e => setManualForm({...manualForm, time_minutes: e.target.value})} style={inputStyle} />
+                    <input type="date" value={manualForm.date} onChange={e => setManualForm({...manualForm, date: e.target.value})} style={inputStyle} />
+                  </div>
+                  <select value={manualForm.type} onChange={e => setManualForm({...manualForm, type: e.target.value})} style={{...inputStyle, appearance: "auto"}}>
+                    <option value="easy">Easy Run</option>
+                    <option value="tempo">Tempo</option>
+                    <option value="hills">Hills</option>
+                    <option value="long">Long Run</option>
+                  </select>
+                  <button onClick={handleManualLog} style={{
+                    padding: "12px", borderRadius: 10, border: "none",
+                    background: "#5cb85c", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
+                  }}>Log Run</button>
+                </div>
+              </div>
+            )}
+
+            {analyzing && (
+              <div style={{
+                background: "#141414", border: "1px solid #222", borderRadius: 12,
+                padding: 20, textAlign: "center", marginBottom: 14,
+              }}>
+                <div style={{ fontSize: 20, animation: "pulse 1.5s infinite" }}>🔍</div>
+                <div style={{ fontSize: 14, fontWeight: 600, marginTop: 6 }}>Analyzing your run...</div>
+              </div>
+            )}
+
+            {analysisResult && (
+              <div className="card" style={{
+                background: "#141414", border: "1px solid #5cb85c33", borderRadius: 14,
+                padding: 18, marginBottom: 14, animationDelay: "0s",
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#5cb85c", letterSpacing: 2, marginBottom: 10 }}>RUN ANALYZED</div>
+                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{analysisResult.title}</div>
+                <div style={{ display: "flex", gap: 16, marginTop: 10 }}>
+                  {[
+                    { label: "Dist", val: `${analysisResult.distance_km}km`, color: "#5cb85c" },
+                    { label: "Pace", val: `${analysisResult.pace_per_km}/km`, color: "#e8b84d" },
+                    { label: "Time", val: `${analysisResult.time_minutes}m`, color: "#5d7be8" },
+                  ].map((m, i) => (
+                    <div key={i}>
+                      <div style={{ fontSize: 9, color: "#444", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1 }}>{m.label}</div>
+                      <div className="mono" style={{ fontSize: 16, fontWeight: 800, color: m.color, marginTop: 2 }}>{m.val}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {coachMsg && (
+              <div className="card" style={{
+                background: "#1a1a2e", border: "1px solid #2d2d5a", borderRadius: 14,
+                padding: 16, marginBottom: 14, animationDelay: "0.1s",
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#5d7be8", letterSpacing: 2, marginBottom: 6 }}>🧠 COACH</div>
+                <div style={{ fontSize: 13, lineHeight: 1.6, color: "#bbb" }}>{coachMsg}</div>
+                {analysisResult?.recovery_tip && (
+                  <div style={{ marginTop: 10, fontSize: 11, color: "#777", background: "#0a0a0a", padding: "6px 10px", borderRadius: 6 }}>
+                    💆 {analysisResult.recovery_tip}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ fontSize: 11, fontWeight: 600, color: "#444", letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>
+              All Runs ({runs.length})
+            </div>
+            {runs.length === 0 && <div style={{ fontSize: 12, color: "#333", textAlign: "center", padding: 16 }}>No runs yet.</div>}
+            {[...runs].reverse().map((r, i) => (
+              <div key={r.id} style={{
+                background: "#111", border: "1px solid #1a1a1a", borderRadius: 10,
+                padding: 12, marginBottom: 6,
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+              }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{r.title || "Run"}</div>
+                  <div style={{ fontSize: 10, color: "#333" }}>{r.date}</div>
+                </div>
+                <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: "#5cb85c", marginRight: 10 }}>{r.distance_km}km</div>
+                <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: "#e8b84d", marginRight: 10 }}>{r.pace_per_km}</div>
+                <button onClick={(e) => { e.stopPropagation(); deleteRun(r.id); }} style={{
+                  background: "none", border: "none", color: "#333", fontSize: 14, cursor: "pointer", padding: "2px 4px",
+                }}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ═══ NUTRITION ═══ */}
+        {tab === "nutrition" && (
+          <div>
+            <div style={{ display: "flex", gap: 5, marginBottom: 14, flexWrap: "wrap" }}>
+              {[
+                { id: "preRun", label: "Pre-Run" },
+                { id: "postRun", label: "Post-Run" },
+                { id: "raceWeek", label: "Race Week" },
+                { id: "daily", label: "Daily" },
+              ].map(t => (
+                <button key={t.id} onClick={() => setNutritionTab(t.id)} style={{
+                  padding: "7px 12px", borderRadius: 8, border: "none", cursor: "pointer",
+                  background: nutritionTab === t.id ? "#e85d5d" : "#1a1a1a",
+                  color: nutritionTab === t.id ? "#fff" : "#555",
+                  fontSize: 11, fontWeight: 600,
+                }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {(nutritionTab === "preRun" || nutritionTab === "postRun") &&
+              NUTRITION[nutritionTab].map((item, i) => (
+                <div key={i} className="card" style={{
+                  background: "#111", border: "1px solid #1a1a1a", borderRadius: 12,
+                  padding: 14, marginBottom: 8, animationDelay: `${i*0.06}s`,
+                }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: "#e8b84d", letterSpacing: 1, textTransform: "uppercase" }}>{item.when}</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, marginTop: 4 }}>{item.what}</div>
+                  <div style={{ fontSize: 11, color: "#555", marginTop: 4, lineHeight: 1.4 }}>{item.why}</div>
+                </div>
+              ))
+            }
+            {nutritionTab === "raceWeek" && NUTRITION.raceWeek.map((tip, i) => (
+              <div key={i} className="card" style={{
+                background: "#111", border: "1px solid #ffc10722", borderRadius: 12,
+                padding: 14, marginBottom: 8, display: "flex", gap: 10, alignItems: "flex-start",
+                animationDelay: `${i*0.06}s`,
+              }}>
+                <span style={{ fontSize: 16 }}>🏅</span>
+                <div style={{ fontSize: 13, lineHeight: 1.5 }}>{tip}</div>
+              </div>
+            ))}
+            {nutritionTab === "daily" && NUTRITION.daily.map((tip, i) => (
+              <div key={i} className="card" style={{
+                background: "#111", border: "1px solid #1a1a1a", borderRadius: 12,
+                padding: 14, marginBottom: 8, display: "flex", gap: 10, alignItems: "flex-start",
+                animationDelay: `${i*0.06}s`,
+              }}>
+                <span style={{ fontSize: 16 }}>🥗</span>
+                <div style={{ fontSize: 13, lineHeight: 1.5 }}>{tip}</div>
+              </div>
+            ))}
+            <div style={{
+              background: "linear-gradient(135deg, #1a2e1a, #111)",
+              border: "1px solid #2d5a2d33", borderRadius: 14, padding: 18, marginTop: 14,
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#5cb85c", letterSpacing: 1, marginBottom: 10 }}>⚡ QUICK GUIDE</div>
+              {[
+                { time: "Morning run", pre: "Toast + banana (2 hrs before) OR banana (30 min)", post: "Smoothie → full breakfast within 1 hr" },
+                { time: "Evening run (after work)", pre: "Light snack at 4pm: crackers + PB, or fruit + nuts", post: "Dinner within 1 hr: rice bowl, pasta, or curry + protein" },
+                { time: "Long run (weekend)", pre: "Full breakfast 2-3 hrs before. Gel at km 8+", post: "Chocolate milk immediately → big meal within 2 hrs" },
+              ].map((s, i) => (
+                <div key={i} style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#ddd" }}>{s.time}</div>
+                  <div style={{ fontSize: 11, color: "#777", marginTop: 3 }}>Before: {s.pre}</div>
+                  <div style={{ fontSize: 11, color: "#777", marginTop: 2 }}>After: {s.post}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ═══ HABITS ═══ */}
+        {tab === "habits" && (
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "#e85d5d", letterSpacing: 2, marginBottom: 10 }}>TODAY · {todayStr}</div>
+            {HABITS.map((h, i) => {
+              const done = habitLog[`${todayStr}-${h.id}`];
+              return (
+                <div key={i} onClick={() => toggleHabit(todayStr, h.id)} style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "12px 14px", marginBottom: 6, borderRadius: 10,
+                  background: done ? "#1a2e1a" : "#111",
+                  border: `1px solid ${done ? "#2d5a2d" : "#1a1a1a"}`,
+                  cursor: "pointer",
+                }}>
+                  <div style={{
+                    width: 22, height: 22, borderRadius: 5,
+                    border: done ? "none" : "2px solid #333",
+                    background: done ? "#5cb85c" : "transparent",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>{done && <span style={{ color: "#fff", fontSize: 13 }}>✓</span>}</div>
+                  <span style={{ fontSize: 18 }}>{h.icon}</span>
+                  <span style={{
+                    fontSize: 13, fontWeight: 500,
+                    textDecoration: done ? "line-through" : "none",
+                    color: done ? "#555" : "#ddd",
+                  }}>{h.label}</span>
+                </div>
+              );
+            })}
+            <div style={{ background: "#141414", border: "1px solid #222", borderRadius: 14, padding: 18, marginTop: 16 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#555", letterSpacing: 2, marginBottom: 12 }}>LAST 7 DAYS</div>
+              <div style={{ display: "flex", gap: 5 }}>
+                {Array.from({length: 7}).map((_, i) => {
+                  const d = new Date(now); d.setDate(d.getDate() - (6-i));
+                  const ds = d.toISOString().slice(0, 10);
+                  const count = HABITS.filter(h => habitLog[`${ds}-${h.id}`]).length;
+                  const pct = count / HABITS.length;
+                  return (
+                    <div key={i} style={{ flex: 1, textAlign: "center" }}>
+                      <div style={{
+                        height: 36, borderRadius: 5,
+                        background: pct === 0 ? "#1a1a1a" : `rgba(92,184,92,${0.15 + pct*0.85})`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 10, fontWeight: 700, fontFamily: "'JetBrains Mono'",
+                        color: pct > 0.5 ? "#fff" : "#444",
+                      }}>{count}</div>
+                      <div style={{ fontSize: 8, color: "#333", marginTop: 3 }}>
+                        {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()]}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div style={{ background: "#1a1a2e", border: "1px solid #2d2d5a", borderRadius: 14, padding: 18, marginTop: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#5d7be8", letterSpacing: 1, marginBottom: 8 }}>PRO TIPS</div>
+              {[
+                "Sleep is the #1 performance enhancer. Protect 7+ hours.",
+                "Foam roll calves and IT bands after every run — 2 min each.",
+                "Hydrate before you're thirsty. Pale pee = good.",
+                "Rest days: a 15-min walk helps more than sitting all day.",
+              ].map((t, i) => (
+                <div key={i} style={{ fontSize: 12, color: "#888", lineHeight: 1.5, marginBottom: 6, paddingLeft: 10, borderLeft: "2px solid #2d2d5a" }}>{t}</div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* BOTTOM NAV */}
+      <div style={{
+        position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
+        width: "100%", maxWidth: 480,
+        background: "rgba(10,10,10,0.95)", backdropFilter: "blur(20px)",
+        borderTop: "1px solid #1a1a1a", display: "flex", padding: "6px 0 10px", zIndex: 20,
+      }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => { setTab(t.id); setCoachMsg(null); setAnalysisResult(null); }} style={{
+            flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
+            background: "none", border: "none", cursor: "pointer",
+            color: tab === t.id ? "#e85d5d" : "#444",
+          }}>
+            <span style={{ fontSize: 16 }}>{t.icon}</span>
+            <span style={{ fontSize: 8, fontWeight: 600, letterSpacing: 0.5 }}>{t.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
